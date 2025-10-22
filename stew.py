@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Slot, QMargins
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QHBoxLayout,
                                QGroupBox, QVBoxLayout, QScrollArea, QPushButton,
-                               QFormLayout, QWidget, QFileDialog, QStyleFactory)
+                               QFormLayout, QWidget, QFileDialog)
 
 windowName = "jsonWindow"
 
@@ -14,6 +14,7 @@ class StaticMeshField(QWidget):
         super().__init__()
 
         self.pushButton = QPushButton(label)
+        self.pushButton.clicked.connect(self.setMesh)
 
         self.hLayout = QHBoxLayout(self)
         self.hLayout.setContentsMargins(QMargins())
@@ -21,13 +22,34 @@ class StaticMeshField(QWidget):
         self.hLayout.addWidget(self.pushButton)
 
         self.setLayout(self.hLayout)
+        self.staticMesh = None
+
+    @Slot()
+    def setMesh(self):
+        assets = unreal.EditorUtilityLibrary.get_selected_assets_of_class(unreal.StaticMesh)
+        if (not assets or len(assets) != 1):
+            unreal.log("Must have only one StaticMesh asset selected.")
+            return
+        
+        self.staticMesh = assets[0]
+        pathName = self.staticMesh.get_path_name()
+        import re
+
+        match = re.match(r'([^\.]+)\.', pathName)
+        self.pushButton.setText(match.group(1))
 
 class StaticMeshList(QGroupBox):
-    def __init__(self, title = "Static Meshes"):
+    def __init__(self, unrealWindow, title = "Static Meshes"):
         super().__init__(title)
+
+        self.unrealWindow = unrealWindow
 
         self.scrollLayout = QFormLayout(formAlignment = Qt.AlignmentFlag.AlignLeft)
         self.scrollLayout.setContentsMargins(QMargins(5, 5, 5, 5))
+        
+        self.openButton = QPushButton("Load scene JSON")
+        self.openButton.clicked.connect(self.unrealWindow.openJSON)
+        self.scrollLayout.addRow(self.openButton)
 
         self.scrollWidget = QWidget()
         self.scrollWidget.setLayout(self.scrollLayout)
@@ -49,13 +71,16 @@ class StaticMeshList(QGroupBox):
         
         for package in packages:
             # spans both columns (QFormLayout.SpanningRole)
-            self.scrollLayout.addRow(StaticMeshField(label = package["fileName"]))
+            self.scrollLayout.addRow(QLabel(f"\"{package['fileName']}\":"),
+                                     StaticMeshField(label = "No mesh set"))
 
 class ImportSettings(QGroupBox):
-    def __init__(self, title = "Import Options"):
+    def __init__(self, unrealWindow, title = "Instancing Settings"):
         super().__init__(title)
 
-        self.importButton = QPushButton("Import Scene")
+        self.unrealWindow = unrealWindow
+        self.importButton = QPushButton("Place Static Meshes")
+        self.importButton.clicked.connect(self.unrealWindow.instanceScene)
         
         self.mainLayout = QVBoxLayout()
         self.mainLayout.setContentsMargins(QMargins(5, 5, 5, 5))
@@ -69,16 +94,19 @@ class UnrealWindow(QMainWindow):
         super().__init__()
 
         self.openAction = QAction(self, text = "Load scene JSON...",
-                                  triggered = self.open)
+                                  triggered = self.openJSON)
 
         self.createMainLayout()
 
         self.fileMenu = self.menuBar().addMenu("File")
         self.fileMenu.addAction(self.openAction)
 
+        self.fileName = None
+        self.data = None
+
     def createMainLayout(self):
-        self.staticMeshList = StaticMeshList()
-        self.importSettings = ImportSettings()
+        self.staticMeshList = StaticMeshList(self)
+        self.importSettings = ImportSettings(self)
         
         self.hLayout = QHBoxLayout()
         self.hLayout.addWidget(self.staticMeshList)
@@ -90,17 +118,38 @@ class UnrealWindow(QMainWindow):
         self.setCentralWidget(self.cWidget)
 
     @Slot()
-    def open(self):
+    def openJSON(self):
         directory = unreal.Paths.project_content_dir()
-        fileName = QFileDialog.getOpenFileName(self,("Open JSON"), directory, ("JSON Files (*.json)"))
-        if (not fileName or fileName[0] == ''):
+        result = QFileDialog.getOpenFileName(self,("Open JSON"), directory, ("JSON Files (*.json)"))
+        unreal.log(result)
+        if (not result or result[0] == ''):
             return
 
+        self.fileName = result[0]
+        
         import json
-        with open(fileName[0], "r") as f:
+        with open(self.fileName, "r") as f:
             self.data = json.load(f)
                 
         self.staticMeshList.loadPackages(self.data['packages'])
+
+    @Slot
+    def instanceScene(self):
+        if (not self.data):
+            return
+
+        for i, package in enumerate(self.data['packages']):
+            staticMesh = self.staticMeshList.scrollLayout.itemAt(i).staticMesh
+            for t in package["transforms"]:
+                placeStaticMesh(staticMesh, t["translate"], t["rotate"])
+
+
+def placeStaticMesh(staticMesh, location = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1]):
+    eAS = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    translate = unreal.Vector(location[0], location[1], location[2])
+
+    staticMeshActor = eAS.spawn_actor_from_class(unreal.StaticMeshActor, translate, rotation)
+    staticMeshActor.get_component_by_class(unreal.StaticMeshComponent).set_static_mesh(staticMesh)
 
 def launchWindow():
     if QApplication.instance():
