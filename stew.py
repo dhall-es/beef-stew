@@ -1,15 +1,27 @@
 import unreal
 import sys
 
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QMargins
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, 
-                               QLineEdit, QSpinBox, QComboBox,
-                               QFormLayout, QGroupBox, QFileDialog)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QHBoxLayout,
+                               QLineEdit, QVBoxLayout, QScrollArea, QPushButton,
+                               QFormLayout, QWidget, QFileDialog)
 
 windowName = "jsonWindow"
 
-# Subclass QMainWindow to customize your application's main window
+class StaticMeshField(QWidget):
+    def __init__(self, parent = None, label = ''):
+        super().__init__(parent)
+
+        self.pushButton = QPushButton(label)
+
+        self.hLayout = QHBoxLayout(self)
+        self.hLayout.setContentsMargins(QMargins())
+
+        self.hLayout.addWidget(self.pushButton)
+
+        self.setLayout(self.hLayout)
+
 class UnrealWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -17,19 +29,30 @@ class UnrealWindow(QMainWindow):
         self.openAction = QAction(self, text = "Load scene JSON...",
                                   triggered = self.open)
 
+        self.createMainLayout()
+
         self.fileMenu = self.menuBar().addMenu("File")
         self.fileMenu.addAction(self.openAction)
 
-        self.formGroupBox = QGroupBox("File Names")
+    def createMainLayout(self):
+        self.scrollLayout = QFormLayout(formAlignment = Qt.AlignmentFlag.AlignLeft)
+        self.scrollLayout.setContentsMargins(QMargins())
 
-        self.formLayout = QFormLayout()
-        # formLayout.addRow(QLabel("Line 1:"), QLineEdit())
-        # formLayout.addRow(QLabel("Line 2, long text:"), QComboBox())
-        # formLayout.addRow(QLabel("Line 3:"), QSpinBox())
+        self.scrollWidget = QWidget()
+        self.scrollWidget.setLayout(self.scrollLayout)
 
-        self.formGroupBox.setLayout(self.formLayout)
+        self.scrollArea = QScrollArea(self, widgetResizable = True)
+        self.scrollArea.setWidget(self.scrollWidget)
 
-        self.setCentralWidget(self.formGroupBox)
+        self.mainLayout = QVBoxLayout()
+        self.mainLayout.setContentsMargins(QMargins(5, 0, 5, 5))
+
+        self.mainLayout.addWidget(self.scrollArea)
+
+        self.cWidget = QWidget(self)
+        self.cWidget.setLayout(self.mainLayout)
+
+        self.setCentralWidget(self.cWidget)
 
     @Slot()
     def open(self):
@@ -40,12 +63,16 @@ class UnrealWindow(QMainWindow):
         
         unreal.log(fileName[0])
 
+        for _ in range(self.scrollLayout.rowCount()):
+            self.scrollLayout.removeRow(0)
+
         import json
         with open(fileName[0], "r") as f:
             self.data = json.load(f)
-        
-        # for package in self.data['packages']:
-        #     self.formLayout.addRow(QLabel(package['fileName'], QLineEdit()))
+                
+        for package in self.data['packages']:
+            # spans both columns (QFormLayout.SpanningRole)
+            self.scrollLayout.addRow(StaticMeshField(label = package["fileName"]))
 
 def launchWindow():
     if QApplication.instance():
