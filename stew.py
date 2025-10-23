@@ -9,9 +9,12 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QHBoxLayout,
 
 windowName = "jsonWindow"
 
-class StaticMeshField(QWidget):
-    def __init__(self, label = ''):
+class StaticMeshListItem(QWidget):
+    def __init__(self, index, parentList, label = ''):
         super().__init__()
+
+        self.parentList = parentList
+        self.index = index
 
         self.pushButton = QPushButton(label)
         self.pushButton.clicked.connect(self.setMesh)
@@ -22,7 +25,6 @@ class StaticMeshField(QWidget):
         self.hLayout.addWidget(self.pushButton)
 
         self.setLayout(self.hLayout)
-        self.staticMesh = None
 
     @Slot()
     def setMesh(self):
@@ -31,8 +33,9 @@ class StaticMeshField(QWidget):
             unreal.log("Must have only one StaticMesh asset selected.")
             return
         
-        self.staticMesh = assets[0]
-        pathName = self.staticMesh.get_path_name()
+        pathName = assets[0].get_path_name()
+
+        self.parentList.staticMeshes.insert(self.index, assets[0])
         import re
 
         match = re.match(r'([^\.]+)\.', pathName)
@@ -41,6 +44,7 @@ class StaticMeshField(QWidget):
 class StaticMeshList(QGroupBox):
     def __init__(self, unrealWindow, title = "Static Meshes"):
         super().__init__(title)
+        self.staticMeshes = []
 
         self.unrealWindow = unrealWindow
 
@@ -69,10 +73,10 @@ class StaticMeshList(QGroupBox):
         for _ in range(self.scrollLayout.rowCount()):
             self.scrollLayout.removeRow(0)
         
-        for package in packages:
+        for i, package in enumerate(packages):
             # spans both columns (QFormLayout.SpanningRole)
             self.scrollLayout.addRow(QLabel(f"\"{package['fileName']}\":"),
-                                     StaticMeshField(label = "No mesh set"))
+                                     StaticMeshListItem(i, self, label = "No mesh set"))
 
 class ImportSettings(QGroupBox):
     def __init__(self, unrealWindow, title = "Instancing Settings"):
@@ -133,23 +137,25 @@ class UnrealWindow(QMainWindow):
                 
         self.staticMeshList.loadPackages(self.data['packages'])
 
-    @Slot
+    @Slot()
     def instanceScene(self):
         if (not self.data):
             return
 
         for i, package in enumerate(self.data['packages']):
-            staticMesh = self.staticMeshList.scrollLayout.itemAt(i).staticMesh
+            staticMesh = self.staticMeshList.staticMeshes[i]
+            unreal.log_warning(f"Loading package {package['fileName']}. Static Mesh = {staticMesh.get_name()}")
             for t in package["transforms"]:
-                placeStaticMesh(staticMesh, t["translate"], t["rotate"])
+                placeStaticMesh(staticMesh, t["name"], t["translate"], t["rotate"])
 
 
-def placeStaticMesh(staticMesh, location = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1]):
+def placeStaticMesh(staticMesh, name, location = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1]):
     eAS = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    translate = unreal.Vector(location[0], location[1], location[2])
+    translate = unreal.Vector(location[0], location[2], location[1])
 
     staticMeshActor = eAS.spawn_actor_from_class(unreal.StaticMeshActor, translate, rotation)
     staticMeshActor.get_component_by_class(unreal.StaticMeshComponent).set_static_mesh(staticMesh)
+    staticMeshActor.set_actor_label(name)
 
 def launchWindow():
     if QApplication.instance():
