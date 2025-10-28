@@ -10,14 +10,14 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QHBoxLayout,
 windowName = "jsonWindow"
 
 class StaticMeshListItem(QWidget):
-    def __init__(self, index, parentList, label = ''):
+    def __init__(self, index, meshList, label = ''):
         super().__init__()
 
-        self.parentList = parentList
+        self.meshList = meshList
         self.index = index
 
         self.pushButton = QPushButton(label)
-        self.pushButton.clicked.connect(self.setMesh)
+        self.pushButton.clicked.connect(self.setMeshToSelected)
 
         self.hLayout = QHBoxLayout(self)
         self.hLayout.setContentsMargins(QMargins())
@@ -27,15 +27,26 @@ class StaticMeshListItem(QWidget):
         self.setLayout(self.hLayout)
 
     @Slot()
-    def setMesh(self):
+    def setMesh(self, mesh):
+        pathName = mesh.get_path_name()
+
+        self.meshList.staticMeshes.insert(self.index, mesh)
+        import re
+
+        match = re.match(r'([^\.]+)\.', pathName)
+        self.pushButton.setText(match.group(1))
+
+    @Slot()
+    def setMeshToSelected(self):
         assets = unreal.EditorUtilityLibrary.get_selected_assets_of_class(unreal.StaticMesh)
         if (not assets or len(assets) != 1):
             unreal.log("Must have only one StaticMesh asset selected.")
             return
         
         pathName = assets[0].get_path_name()
+        print(pathName)
 
-        self.parentList.staticMeshes.insert(self.index, assets[0])
+        self.meshList.staticMeshes.insert(self.index, assets[0])
         import re
 
         match = re.match(r'([^\.]+)\.', pathName)
@@ -69,14 +80,27 @@ class StaticMeshList(QGroupBox):
 
         self.setLayout(self.mainLayout)
 
-    def loadPackages(self, packages):
+    def loadJSON(self, data):
         for _ in range(self.scrollLayout.rowCount()):
             self.scrollLayout.removeRow(0)
-        
-        for i, package in enumerate(packages):
+
+        eAS = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
+
+        for i, package in enumerate(data['packages']):
+            listItem = StaticMeshListItem(i, self, label = "No mesh set")
+
             # spans both columns (QFormLayout.SpanningRole)
             self.scrollLayout.addRow(QLabel(f"\"{package['fileName']}\":"),
-                                     StaticMeshListItem(i, self, label = "No mesh set"))
+                                     listItem)
+
+            import re
+            relativePath = unreal.Paths.make_path_relative_to(package['path'], unreal.Paths.project_dir())
+            path = f"{re.sub('Content/', '/Game/', relativePath)}.{package['fileName']}"
+
+            print(eAS.does_asset_exist(path))
+
+            if (eAS.does_asset_exist(path)):
+                listItem.setMesh(eAS.load_asset(path))
 
 class ImportSettings(QGroupBox):
     def __init__(self, unrealWindow, title = "Instancing Settings"):
@@ -135,7 +159,7 @@ class UnrealWindow(QMainWindow):
         with open(self.fileName, "r") as f:
             self.data = json.load(f)
                 
-        self.staticMeshList.loadPackages(self.data['packages'])
+        self.staticMeshList.loadJSON(self.data)
 
     @Slot()
     def instanceScene(self):
