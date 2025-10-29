@@ -7,8 +7,6 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QHBoxLayout,
                                QGroupBox, QVBoxLayout, QScrollArea, QPushButton,
                                QFormLayout, QWidget, QFileDialog)
 
-windowName = "jsonWindow"
-
 class StaticMeshListItem(QWidget):
     def __init__(self, index, meshList, label = ''):
         super().__init__()
@@ -46,7 +44,7 @@ class StaticMeshListItem(QWidget):
         pathName = assets[0].get_path_name()
         print(pathName)
 
-        self.meshList.staticMeshes.insert(self.index, assets[0])
+        self.meshList.staticMeshes[self.index] = assets[0]
         import re
 
         match = re.match(r'([^\.]+)\.', pathName)
@@ -88,6 +86,7 @@ class StaticMeshList(QGroupBox):
 
         for i, package in enumerate(data['packages']):
             listItem = StaticMeshListItem(i, self, label = "No mesh set")
+            self.staticMeshes.append(None)
 
             # spans both columns (QFormLayout.SpanningRole)
             self.scrollLayout.addRow(QLabel(f"\"{package['fileName']}\":"),
@@ -175,10 +174,6 @@ class UnrealWindow(QMainWindow):
 
 def placeStaticMesh(staticMesh, name, location = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1]):
     eAS = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    # transform = unreal.Transform()
-    # transform.translation = unreal.Vector(location[0], location[2], location[1])
-    # unreal.Quat.set_from_euler(transform.rotation, unreal.Vector(rotation[0], rotation[2], rotation[1]))
-    # transform.scale3d = unreal.Vector(scale[0], scale[2], scale[1])
 
     staticMeshActor = eAS.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector.ZERO)
     staticMeshActor.get_component_by_class(unreal.StaticMeshComponent).set_static_mesh(staticMesh)
@@ -188,9 +183,7 @@ def placeStaticMesh(staticMesh, name, location = [0, 0, 0], rotation = [0, 0, 0]
     staticMeshActor.set_actor_rotation(unreal.Rotator(rotation[0], rotation[2], -rotation[1]), True)
     staticMeshActor.set_actor_relative_scale3d(unreal.Vector(scale[0], scale[2], scale[1]))
 
-    # eAS.set_actor_transform(staticMeshActor, transform)
-
-def launchWindow():
+def Launch(windowName = "jsonWindow"):
     if QApplication.instance():
         # Id any current instances of tool and destroy
         for win in (QApplication.allWindows()):
@@ -204,5 +197,3 @@ def launchWindow():
     UnrealWindow.window.setWindowTitle("JSON Scene Importer")
     UnrealWindow.window.setObjectName(windowName)
     unreal.parent_external_window_to_slate(UnrealWindow.window.winId())
-
-launchWindow()
