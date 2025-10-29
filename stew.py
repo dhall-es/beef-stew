@@ -169,17 +169,26 @@ class UnrealWindow(QMainWindow):
         for i, package in enumerate(self.data['packages']):
             staticMesh = self.staticMeshList.staticMeshes[i]
             unreal.log_warning(f"Loading package {package['fileName']}. Static Mesh = {staticMesh.get_name()}")
-            for t in package["transforms"]:
-                placeStaticMesh(staticMesh, t["name"], t["translate"], t["rotate"])
+            for t in package['transforms']:
+                placeStaticMesh(staticMesh, t['name'], t['translate'], t['rotate'], t['scale'])
 
 
 def placeStaticMesh(staticMesh, name, location = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1]):
     eAS = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    translate = unreal.Vector(location[0], location[2], location[1])
+    # transform = unreal.Transform()
+    # transform.translation = unreal.Vector(location[0], location[2], location[1])
+    # unreal.Quat.set_from_euler(transform.rotation, unreal.Vector(rotation[0], rotation[2], rotation[1]))
+    # transform.scale3d = unreal.Vector(scale[0], scale[2], scale[1])
 
-    staticMeshActor = eAS.spawn_actor_from_class(unreal.StaticMeshActor, translate, rotation)
+    staticMeshActor = eAS.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector.ZERO)
     staticMeshActor.get_component_by_class(unreal.StaticMeshComponent).set_static_mesh(staticMesh)
     staticMeshActor.set_actor_label(name)
+
+    staticMeshActor.set_actor_location(unreal.Vector(location[0], location[2], location[1]), False, True)
+    staticMeshActor.set_actor_rotation(unreal.Rotator(rotation[0], rotation[2], -rotation[1]), True)
+    staticMeshActor.set_actor_relative_scale3d(unreal.Vector(scale[0], scale[2], scale[1]))
+
+    # eAS.set_actor_transform(staticMeshActor, transform)
 
 def launchWindow():
     if QApplication.instance():
