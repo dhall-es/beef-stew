@@ -6,7 +6,7 @@ class Menu():
         self.menuOwnerName = "JSONImportTool"
         self.subMenu = None
 
-        self.toolMenuName = "LevelEditor.MainMenu.JSONTool"
+        self.toolMenuName = "LevelEditor.MainMenu.JSONImportTool"
         
     def create(self):
         mainMenu = self.toolMenus.find_menu("LevelEditor.MainMenu")
@@ -15,7 +15,7 @@ class Menu():
                                              name = self.menuOwnerName,
                                              label = "JSON Importer",
                                              tool_tip = "Open the JSON Importer menu")
-        self.subMenu - self.toolMenus.register_menu(self.toolMenuName, "", unreal.MultiBoxType.MENU, True)
+        self.subMenu = self.toolMenus.register_menu(self.toolMenuName, "", unreal.MultiBoxType.MENU, True)
         self.toolMenus.refresh_all_widgets()
 
         self.addMenuEntry()
